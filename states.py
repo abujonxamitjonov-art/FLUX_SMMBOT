@@ -44,3 +44,7 @@ class AdminMargin(StatesGroup):
 
 class AdminMandatoryChannel(StatesGroup):
     waiting_channel_id = State()
+
+
+class AdminManualNumber(StatesGroup):
+    waiting_code = State()
