@@ -33,12 +33,10 @@ def subscribe_kb(channels: list, lang: str) -> InlineKeyboardMarkup:
         title = ch.get("title") or ch.get("chat_id")
         chat_id = str(ch.get("chat_id", ""))
         url = ch.get("invite_link")
-        if not url and chat_id.startswith("@"):
+        if not url and chat_id.startswith("@"): 
             url = f"https://t.me/{chat_id.lstrip('@')}"
         if url:
             rows.append([InlineKeyboardButton(text=f"📢 {title}", url=url)])
-        else:
-            rows.append([InlineKeyboardButton(text=f"📢 {title}", callback_data="check_subs")])
     rows.append([InlineKeyboardButton(text=t(lang, "subscribe_check_btn"), callback_data="check_subs")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
