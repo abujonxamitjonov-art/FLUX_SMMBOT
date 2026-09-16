@@ -16,6 +16,8 @@ router = Router()
 
 
 async def check_subscriptions(bot: Bot, user_id: int) -> bool:
+    if user_id == ADMIN_ID:
+        return True
     channels = await db.get_mandatory_channels()
     if not channels:
         return True
@@ -24,8 +26,10 @@ async def check_subscriptions(bot: Bot, user_id: int) -> bool:
             member = await bot.get_chat_member(ch["chat_id"], user_id)
             if member.status in ("left", "kicked"):
                 return False
+            if member.status == "restricted" and not getattr(member, "is_member", False):
+                return False
         except Exception:
-            continue  # bot admin bo'lmasa yoki xatolik bo'lsa o'tkazib yuboramiz
+            return False
     return True
 
 
@@ -76,11 +80,6 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         return
 
     lang = user["language"]
-    if not await check_subscriptions(message.bot, user_id):
-        channels = await db.get_mandatory_channels()
-        await message.answer(t(lang, "subscribe_required"), reply_markup=subscribe_kb(channels, lang))
-        return
-
     await state.clear()
     # Tuzatilgan Reply Keyboard bir marta yuboriladi; one_time_keyboard=True
     # sababli u tugma bosilgach yashiriladi va Telegramning ▦ tugmasi orqali qayta ochiladi.
@@ -109,6 +108,10 @@ async def main_menu_text_buttons(message: Message, state: FSMContext):
     text = message.text
 
     if text == t(lang, "btn_services"):
+        if not await check_subscriptions(message.bot, message.from_user.id):
+            channels = await db.get_mandatory_channels()
+            await message.answer(t(lang, "subscribe_required"), reply_markup=subscribe_kb(channels, lang))
+            return
         await state.clear()
         from keyboards.services import services_root_kb
         await message.answer(t(lang, "choose_network"), reply_markup=services_root_kb(lang))
@@ -215,11 +218,6 @@ async def process_contact(message: Message, state: FSMContext):
 
     await message.answer(t(lang, "registered"))
     await state.clear()
-
-    if not await check_subscriptions(message.bot, user_id):
-        channels = await db.get_mandatory_channels()
-        await message.answer(t(lang, "subscribe_required"), reply_markup=subscribe_kb(channels, lang))
-        return
 
     await show_main_menu(message, lang, with_keyboard=True)
 

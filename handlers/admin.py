@@ -136,17 +136,41 @@ async def cmd_add_channel(message: Message, state: FSMContext):
 async def process_add_channel(message: Message, state: FSMContext):
     if not admin_only(message):
         return
-    chat_id = message.text.strip()
+    raw = (message.text or "").strip()
     await state.clear()
+
+    # @username, -100... ID yoki public t.me havolasi.
+    chat_id = raw
+    if "t.me/" in chat_id:
+        part = chat_id.split("t.me/", 1)[1].strip().strip("/")
+        if part.startswith("+"):
+            await message.answer("❌ Private invite link emas, kanal/guruh ID'si (-100...) yoki @username yuboring.")
+            return
+        chat_id = "@" + part.lstrip("@")
+
     try:
         chat = await message.bot.get_chat(chat_id)
-        title = chat.title or chat_id
-        ctype = "group" if chat.type in ("group", "supergroup") else "channel"
     except Exception:
-        title = chat_id
-        ctype = "channel"
-    await db.add_mandatory_channel(chat_id, title, ctype)
-    await message.answer(f"✅ Qo'shildi: {title} ({chat_id})")
+        await message.answer("❌ Kanal/guruh topilmadi. Bot o'sha joyda admin ekanini tekshiring va @username yoki -100... ID yuboring.")
+        return
+
+    title = chat.title or chat.username or str(chat.id)
+    ctype = "group" if chat.type in ("group", "supergroup") else "channel"
+    invite_link = None
+    if getattr(chat, "username", None):
+        invite_link = f"https://t.me/{chat.username}"
+    else:
+        try:
+            invite = await message.bot.create_chat_invite_link(chat.id)
+            invite_link = invite.invite_link
+        except Exception:
+            pass
+
+    await db.add_mandatory_channel(str(chat.id), title, ctype, invite_link)
+    if invite_link:
+        await message.answer(f"✅ Qo'shildi: {title}\n🔗 Obuna havolasi tayyor.")
+    else:
+        await message.answer(f"⚠️ {title} qo'shildi, lekin obuna havolasini yaratib bo'lmadi. Botga invite link yaratish huquqini bering.")
 
 
 @router.message(Command("list_channels"))
