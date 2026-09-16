@@ -139,14 +139,42 @@ async def process_add_channel(message: Message, state: FSMContext):
     raw = (message.text or "").strip()
     await state.clear()
 
-    # @username, -100... ID yoki public t.me havolasi.
+    # @username, -100... ID yoki public Telegram havolasini qabul qilamiz.
+    # Masalan: @mychannel, https://t.me/mychannel, t.me/mychannel
     chat_id = raw
-    if "t.me/" in chat_id:
-        part = chat_id.split("t.me/", 1)[1].strip().strip("/")
-        if part.startswith("+"):
-            await message.answer("❌ Private invite link emas, kanal/guruh ID'si (-100...) yoki @username yuboring.")
+    if raw.startswith("http://") or raw.startswith("https://") or raw.startswith("t.me/") or raw.startswith("telegram.me/"):
+        link = raw if raw.startswith(("http://", "https://")) else "https://" + raw
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(link)
+            host = (parsed.netloc or "").lower().split(":")[0]
+            path = parsed.path.strip("/")
+            if host not in {"t.me", "www.t.me", "telegram.me", "www.telegram.me"} or not path:
+                raise ValueError
+            # Public username link: t.me/username
+            # Private invite links (t.me/+... or t.me/joinchat/...) cannot be resolved
+            # to a chat by Bot API, so they are rejected with a clear message.
+            if path.startswith("+") or path.startswith("joinchat/"):
+                await message.answer(
+                    "❌ Bu private invite havola.\n\n"
+                    "Public kanal/guruh bo'lsa: https://t.me/username yuboring.\n"
+                    "Yoki guruh/kanal ID'sini (-100...) yuboring."
+                )
+                return
+            username = path.split("/", 1)[0].lstrip("@")
+            if not username or not username.replace("_", "a").isalnum():
+                raise ValueError
+            chat_id = "@" + username
+        except Exception:
+            await message.answer(
+                "❌ Telegram havolasi noto'g'ri.\n\n"
+                "Masalan: https://t.me/kanal_nomi"
+            )
             return
-        chat_id = "@" + part.lstrip("@")
+    elif raw.startswith("@"): 
+        chat_id = raw.split()[0]
+    elif raw.startswith("-100"):
+        chat_id = raw.split()[0]
 
     try:
         chat = await message.bot.get_chat(chat_id)
