@@ -73,6 +73,23 @@ async def init_db():
             user_id INTEGER PRIMARY KEY,
             api_key TEXT UNIQUE
         );
+
+        CREATE TABLE IF NOT EXISTS manual_countries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            normalized_name TEXT NOT NULL UNIQUE,
+            base_price INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS manual_numbers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            country_id INTEGER NOT NULL,
+            phone TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'available',
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(country_id) REFERENCES manual_countries(id)
+        );
         """
     )
     await _db.commit()
@@ -233,6 +250,11 @@ async def set_order_channel_message(order_id: int, message_id: int):
     await _db.commit()
 
 
+async def update_order_extra(order_id: int, extra: str):
+    await _db.execute("UPDATE orders SET extra=? WHERE order_id=?", (extra, order_id))
+    await _db.commit()
+
+
 async def update_order_status(order_id: int, status: str):
     await _db.execute("UPDATE orders SET status=? WHERE order_id=?", (status, order_id))
     await _db.commit()
@@ -294,6 +316,78 @@ async def set_topup_status(topup_id: int, status: str):
     await _db.execute("UPDATE topups SET status=? WHERE topup_id=?", (status, topup_id))
     await _db.commit()
 
+
+
+# ---------------- MANUAL NUMBERS ----------------
+
+async def get_manual_countries():
+    cur = await _db.execute("SELECT * FROM manual_countries ORDER BY name COLLATE NOCASE")
+    rows = await cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+async def get_manual_country_by_name(normalized_name: str):
+    cur = await _db.execute("SELECT * FROM manual_countries WHERE normalized_name=?", (normalized_name,))
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+async def create_manual_country(name: str, normalized_name: str, base_price: int):
+    cur = await _db.execute(
+        "INSERT INTO manual_countries (name, normalized_name, base_price, created_at) VALUES (?, ?, ?, ?)",
+        (name, normalized_name, base_price, int(time.time())),
+    )
+    await _db.commit()
+    return await get_manual_country_by_name(normalized_name)
+
+async def get_manual_country(country_id: int):
+    cur = await _db.execute("SELECT * FROM manual_countries WHERE id=?", (country_id,))
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+async def add_manual_number(country_id: int, phone: str):
+    cur = await _db.execute(
+        "INSERT INTO manual_numbers (country_id, phone, status, created_at) VALUES (?, ?, 'available', ?)",
+        (country_id, phone, int(time.time())),
+    )
+    await _db.commit()
+    return cur.lastrowid
+
+async def get_manual_number(number_id: int):
+    cur = await _db.execute(
+        "SELECT mn.*, mc.name AS country_name, mc.base_price FROM manual_numbers mn JOIN manual_countries mc ON mc.id=mn.country_id WHERE mn.id=?",
+        (number_id,),
+    )
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    cols = [d[0] for d in cur.description]
+    return dict(zip(cols, row))
+
+async def get_available_manual_numbers(country_id: int):
+    cur = await _db.execute(
+        "SELECT * FROM manual_numbers WHERE country_id=? AND status='available' ORDER BY id", (country_id,)
+    )
+    rows = await cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+async def reserve_manual_number(number_id: int, user_id: int):
+    cur = await _db.execute(
+        "UPDATE manual_numbers SET status=? WHERE id=? AND status='available'",
+        (f'sold:{user_id}', number_id),
+    )
+    await _db.commit()
+    return cur.rowcount == 1
+
+async def set_manual_number_status(number_id: int, status: str):
+    await _db.execute("UPDATE manual_numbers SET status=? WHERE id=?", (status, number_id))
+    await _db.commit()
 
 # ---------------- SETTINGS ----------------
 
