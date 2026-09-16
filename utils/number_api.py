@@ -39,3 +39,16 @@ async def get_sms(phone_hash: str) -> dict:
 
 def apply_margin(price: float, margin_percent: float) -> int:
     return max(1, round(price * (1 + margin_percent / 100)))
+
+
+async def get_country_price_by_name(name: str):
+    """API davlatlaridan nom bo'yicha bazaviy narxni topadi."""
+    wanted = str(name or '').strip().casefold()
+    for c in await get_countries():
+        n = str(c.get('name') or '').strip().casefold()
+        if n == wanted or wanted in n or n in wanted:
+            try:
+                return float(c.get('price', 0) or 0), c
+            except (TypeError, ValueError):
+                return 0.0, c
+    return None, None
