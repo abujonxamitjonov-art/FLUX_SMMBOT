@@ -62,6 +62,9 @@ class MandatorySubscriptionMiddleware(BaseMiddleware):
                 if member.status in ("left", "kicked"):
                     subscribed = False
                     break
+                if member.status == "restricted" and not getattr(member, "is_member", False):
+                    subscribed = False
+                    break
             except Exception:
                 subscribed = False
                 break
