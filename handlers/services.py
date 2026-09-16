@@ -98,11 +98,12 @@ async def cb_choose_type(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⏳ Xizmat topilmadi.", show_alert=True)
         return
 
+    margin = float(await db.get_setting("smm_margin_percent", 30))
     await state.update_data(network=network, stype=stype)
     await state.set_state(ServiceOrder.choosing_service)
     await callback.message.edit_text(
         t(lang, "choose_service"),
-        reply_markup=services_list_kb(lang, network, stype, services),
+        reply_markup=services_list_kb(lang, network, stype, services, margin),
     )
     await callback.answer()
 

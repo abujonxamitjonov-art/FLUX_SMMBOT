@@ -82,9 +82,9 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         return
 
     await state.clear()
-    # Mavjud foydalanuvchida keyboard qayta-qayta yuborilmaydi.
-    # Telegramning o'zidagi ▦ tugmasi orqali foydalanuvchi keyboardni ochishi/yashirishi mumkin.
-    await show_main_menu(message, lang, with_keyboard=False)
+    # Tuzatilgan Reply Keyboard bir marta yuboriladi; one_time_keyboard=True
+    # sababli u tugma bosilgach yashiriladi va Telegramning ▦ tugmasi orqali qayta ochiladi.
+    await show_main_menu(message, lang, with_keyboard=True)
     return
 
 
