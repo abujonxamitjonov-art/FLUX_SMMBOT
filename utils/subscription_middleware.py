@@ -32,7 +32,8 @@ class MandatorySubscriptionMiddleware(BaseMiddleware):
         # /start, til tanlash va kontakt yuborish orqali ro'yxatdan o'tish
         # majburiy obunadan oldin bajarilishi kerak.
         if isinstance(event, Message):
-            if event.text == "/start" or event.text.startswith("/start "):
+            event_text = event.text or ""
+            if event_text == "/start" or event_text.startswith("/start "):
                 return await handler(event, data)
 
             db_user = await db.get_user(user_id)
