@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.service_classifier import SERVICE_TYPES
+from utils.smm_api import apply_margin
 from texts import t
 
 
@@ -41,11 +42,18 @@ def service_types_kb(lang: str, network: str, available_types: list) -> InlineKe
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def services_list_kb(lang: str, network: str, stype: str, services: list) -> InlineKeyboardMarkup:
+def services_list_kb(lang: str, network: str, stype: str, services: list, margin_percent: float = 0) -> InlineKeyboardMarkup:
     rows = []
     for s in services[:40]:  # juda uzun bo'lmasligi uchun cheklov
+        # API bergan bazaviy rate emas, mijozga olinadigan (margin qo'shilgan)
+        # narx ko'rsatiladi. Buyurtma vaqtida ham aynan shu formula ishlatiladi.
+        try:
+            customer_rate = apply_margin(float(s["rate"]), float(margin_percent))
+            rate_text = f"{customer_rate:,.2f}".rstrip("0").rstrip(".").replace(",", " ")
+        except (TypeError, ValueError):
+            rate_text = str(s.get("rate", "0"))
         rows.append([InlineKeyboardButton(
-            text=f"{s['name']} — {s['rate']} so'm/1000",
+            text=f"{s['name']} — {rate_text} so'm/1000",
             callback_data=f"svc_pick_{s['service']}"
         )])
     rows.append([InlineKeyboardButton(text=t(lang, "btn_back"), callback_data=f"svc_net_{network}")])

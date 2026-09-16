@@ -40,7 +40,7 @@ def subscribe_kb(channels: list, lang: str) -> InlineKeyboardMarkup:
 
 
 def main_menu_kb(lang: str) -> ReplyKeyboardMarkup:
-    """Doimiy asosiy Reply Keyboard."""
+    """Oddiy Telegram Reply Keyboard; foydalanuvchi uni Telegram UI orqali yashirishi/ochishi mumkin."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=t(lang, "btn_number")), KeyboardButton(text=t(lang, "btn_services"))],
@@ -50,10 +50,9 @@ def main_menu_kb(lang: str) -> ReplyKeyboardMarkup:
             [KeyboardButton(text=t(lang, "btn_support"))],
         ],
         resize_keyboard=True,
-        one_time_keyboard=False,
-        is_persistent=True,
+        one_time_keyboard=True,
+        is_persistent=False,
         selective=False,
-        input_field_placeholder="Kerakli bo‘limni tanlang...",
     )
 
 
