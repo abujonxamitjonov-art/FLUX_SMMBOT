@@ -14,6 +14,7 @@ from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefaul
 from config import BOT_TOKEN, ADMIN_ID
 from database import db
 from texts import t
+from utils.subscription_middleware import MandatorySubscriptionMiddleware
 
 from handlers import user, services, numbers, premium_stars_gifts, manual_orders, topup, orders, referral, admin
 
@@ -107,6 +108,12 @@ async def main():
 
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
+
+    # Barcha oddiy foydalanuvchi harakatlari uchun markaziy majburiy obuna tekshiruvi.
+    # Admin va ro'yxatdan o'tish jarayoni bundan mustasno.
+    mandatory_sub_middleware = MandatorySubscriptionMiddleware()
+    dp.message.middleware(mandatory_sub_middleware)
+    dp.callback_query.middleware(mandatory_sub_middleware)
 
     dp.include_router(admin.router)
     dp.include_router(user.router)
