@@ -29,13 +29,14 @@ async def check_subscriptions(bot: Bot, user_id: int) -> bool:
     return True
 
 
-async def show_main_menu(message_or_cb, lang: str, edit: bool = False):
-    """Asosiy Reply Keyboard'ni yuboradi. Inline xabarni tahrirlashga urinmaydi."""
+async def show_main_menu(message_or_cb, lang: str, with_keyboard: bool = False):
+    """Asosiy menyuni ko'rsatadi. Reply Keyboard faqat kerak bo'lganda yuboriladi."""
     text = t(lang, "main_menu")
-    kb = main_menu_kb(lang)
     target = message_or_cb.message if isinstance(message_or_cb, CallbackQuery) else message_or_cb
-    await target.answer(text, reply_markup=kb)
-    await db.mark_main_menu_keyboard_sent(target.chat.id, 3)
+    if with_keyboard:
+        await target.answer(text, reply_markup=main_menu_kb(lang))
+    else:
+        await target.answer(text)
 
 
 @router.message(CommandStart())
@@ -81,11 +82,9 @@ async def cmd_start(message: Message, state: FSMContext, command: CommandObject)
         return
 
     await state.clear()
-    # Reply Keyboard yangi versiyada bir marta yangilanadi.
-    # Eski foydalanuvchilarda version=2 bo‘lsa, /start orqali keyboard 3-versiyaga yangilanadi.
-    # Keyingi /start bosishlarda yangi menyu xabari yuborilmaydi.
-    if int(user.get("main_menu_keyboard_version") or 0) < 3:
-        await show_main_menu(message, lang)
+    # Mavjud foydalanuvchida keyboard qayta-qayta yuborilmaydi.
+    # Telegramning o'zidagi ▦ tugmasi orqali foydalanuvchi keyboardni ochishi/yashirishi mumkin.
+    await show_main_menu(message, lang, with_keyboard=False)
     return
 
 
@@ -222,7 +221,7 @@ async def process_contact(message: Message, state: FSMContext):
         await message.answer(t(lang, "subscribe_required"), reply_markup=subscribe_kb(channels, lang))
         return
 
-    await show_main_menu(message, lang)
+    await show_main_menu(message, lang, with_keyboard=True)
 
 
 @router.message(Registration.waiting_contact)
@@ -238,7 +237,7 @@ async def cb_check_subs(callback: CallbackQuery):
     lang = user["language"] if user else "uz"
     if await check_subscriptions(callback.bot, callback.from_user.id):
         await callback.message.delete()
-        await show_main_menu(callback, lang)
+        await show_main_menu(callback, lang, with_keyboard=False)
     else:
         await callback.answer(t(lang, "subscribe_not_done"), show_alert=True)
 
@@ -248,7 +247,7 @@ async def cb_back_main_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user = await db.get_user(callback.from_user.id)
     lang = user["language"] if user else "uz"
-    await show_main_menu(callback, lang, edit=True)
+    await show_main_menu(callback, lang, with_keyboard=False)
     await callback.answer()
 
 

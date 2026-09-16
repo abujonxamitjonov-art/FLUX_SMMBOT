@@ -5,7 +5,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from database import db
-from states import AdminBroadcast, AdminMargin, AdminMandatoryChannel
+from states import AdminBroadcast, AdminMargin, AdminMandatoryChannel, AdminManualNumber
 from config import ADMIN_ID
 
 router = Router()
@@ -24,6 +24,7 @@ ADMIN_HELP = (
     "/remove_channel — Majburiy kanalni o'chirish\n"
     "/set_smm_margin — SMM xizmatlar foydasini o'zgartirish (%)\n"
     "/set_number_margin — Nomer olish foydasini o'zgartirish (%)\n"
+    "/add_number +raqam [DAVLAT] — Manual nomer qo'shish\n"
     "/user &lt;id&gt; — Foydalanuvchi haqida ma'lumot\n"
 )
 
@@ -218,3 +219,44 @@ async def process_number_margin(message: Message, state: FSMContext):
     await db.set_setting("number_margin_percent", str(value))
     await state.clear()
     await message.answer(f"✅ Nomer olish margin {value}% qilib o'rnatildi.")
+
+
+# ---------------- MANUAL NUMBER CODE ----------------
+
+@router.message(Command("add_number"))
+async def cmd_add_number(message: Message):
+    if not admin_only(message):
+        return
+    from utils.manual_numbers import add_manual_number_from_command
+    result = await add_manual_number_from_command(message.text or "")
+    await message.answer(result)
+
+@router.message()
+async def admin_manual_code(message: Message):
+    if not admin_only(message) or not message.text:
+        return
+    pending = await db.get_setting(f"manual_pending_admin_{ADMIN_ID}")
+    if not pending:
+        return
+    try:
+        oid=int(pending)
+    except ValueError:
+        await db.set_setting(f"manual_pending_admin_{ADMIN_ID}","")
+        return
+    order=await db.get_order(oid)
+    if not order:
+        await db.set_setting(f"manual_pending_admin_{ADMIN_ID}","")
+        return
+    import json, time
+    extra=json.loads(order["extra"] or "{}")
+    if extra.get("source")!="manual" or extra.get("code_sent"):
+        await db.set_setting(f"manual_pending_admin_{ADMIN_ID}","")
+        return
+    code=message.text.strip()
+    if not code or len(code)>64:
+        return
+    extra["code_sent"]=True; extra["code_sent_at"]=int(time.time()); extra["sms_code"]=code
+    await db.update_order_extra(oid,json.dumps(extra))
+    await db.set_setting(f"manual_pending_admin_{ADMIN_ID}","")
+    await message.answer(f"✅ Kod #{oid} uchun saqlandi va mijozga yuborildi.")
+    await message.bot.send_message(order["user_id"], f"✅ SMS kod: `{code}`\n\nKod bir marta yuborildi. Koddan foydalanganingizdan so‘ng `Kirdim` tugmasini bosing.", parse_mode="HTML", reply_markup=__import__('aiogram').types.InlineKeyboardMarkup(inline_keyboard=[[__import__('aiogram').types.InlineKeyboardButton(text='Kirdim',callback_data=f'num_entered_{oid}')]]))
