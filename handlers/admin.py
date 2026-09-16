@@ -125,25 +125,42 @@ async def process_broadcast(message: Message, state: FSMContext):
 async def cmd_add_channel(message: Message, state: FSMContext):
     if not admin_only(message):
         return
+
+    # /add_channel <username|ID|public link> — bir xabarning o'zida ham qabul qilinadi.
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[1].strip():
+        await process_add_channel_value(message, parts[1].strip(), state)
+        return
+
     await state.set_state(AdminMandatoryChannel.waiting_channel_id)
     await message.answer(
-        "📢 Kanal/guruh username yoki ID'sini yuboring (masalan @kanal yoki -1001234567890).\n"
-        "Bot o'sha kanalda admin bo'lishi shart."
+        "📢 Kanal/guruh username, ID yoki havolasini yuboring.\n\n"
+        "Misollar:\n"
+        "• @kanal_nomi\n"
+        "• -1001234567890\n"
+        "• https://t.me/kanal_nomi\n\n"
+        "Bot o'sha kanal/guruhda admin bo'lishi shart."
     )
 
 
-@router.message(AdminMandatoryChannel.waiting_channel_id)
+@router.message(AdminMandatoryChannel.waiting_channel_id, F.text)
 async def process_add_channel(message: Message, state: FSMContext):
     if not admin_only(message):
         return
-    raw = (message.text or "").strip()
+    await process_add_channel_value(message, message.text.strip(), state)
+
+
+async def process_add_channel_value(message: Message, raw: str, state: FSMContext):
     await state.clear()
+    raw = (raw or "").strip()
+    if not raw:
+        await message.answer("❌ Kanal/guruh havolasi, username yoki ID bo'sh bo'lishi mumkin emas.")
+        return
 
     # @username, -100... ID yoki public Telegram havolasini qabul qilamiz.
-    # Masalan: @mychannel, https://t.me/mychannel, t.me/mychannel
-    chat_id = raw
-    if raw.startswith("http://") or raw.startswith("https://") or raw.startswith("t.me/") or raw.startswith("telegram.me/"):
-        link = raw if raw.startswith(("http://", "https://")) else "https://" + raw
+    chat_id = raw.split()[0]
+    if chat_id.startswith(("http://", "https://", "t.me/", "telegram.me/")):
+        link = chat_id if chat_id.startswith(("http://", "https://")) else "https://" + chat_id
         try:
             from urllib.parse import urlparse
             parsed = urlparse(link)
@@ -151,14 +168,13 @@ async def process_add_channel(message: Message, state: FSMContext):
             path = parsed.path.strip("/")
             if host not in {"t.me", "www.t.me", "telegram.me", "www.telegram.me"} or not path:
                 raise ValueError
-            # Public username link: t.me/username
-            # Private invite links (t.me/+... or t.me/joinchat/...) cannot be resolved
-            # to a chat by Bot API, so they are rejected with a clear message.
-            if path.startswith("+") or path.startswith("joinchat/"):
+            # Public link: https://t.me/username
+            # Private invite links cannot be resolved to a chat_id by Bot API.
+            if path.startswith("+") or path.lower().startswith("joinchat/"):
                 await message.answer(
                     "❌ Bu private invite havola.\n\n"
-                    "Public kanal/guruh bo'lsa: https://t.me/username yuboring.\n"
-                    "Yoki guruh/kanal ID'sini (-100...) yuboring."
+                    "Public kanal/guruh uchun https://t.me/username yuboring\n"
+                    "yoki kanal/guruh ID'sini (-100...) yuboring."
                 )
                 return
             username = path.split("/", 1)[0].lstrip("@")
@@ -166,24 +182,37 @@ async def process_add_channel(message: Message, state: FSMContext):
                 raise ValueError
             chat_id = "@" + username
         except Exception:
-            await message.answer(
-                "❌ Telegram havolasi noto'g'ri.\n\n"
-                "Masalan: https://t.me/kanal_nomi"
-            )
+            await message.answer("❌ Havola noto'g'ri. Masalan: https://t.me/kanal_nomi")
             return
-    elif raw.startswith("@"): 
-        chat_id = raw.split()[0]
-    elif raw.startswith("-100"):
-        chat_id = raw.split()[0]
+    elif chat_id.startswith("@"): 
+        chat_id = chat_id
+    elif chat_id.startswith("-100"):
+        chat_id = chat_id
+    else:
+        await message.answer(
+            "❌ Format noto'g'ri.\n\n"
+            "Yuboring:\n"
+            "@kanal_nomi\n"
+            "-1001234567890\n"
+            "https://t.me/kanal_nomi"
+        )
+        return
 
     try:
         chat = await message.bot.get_chat(chat_id)
-    except Exception:
-        await message.answer("❌ Kanal/guruh topilmadi. Bot o'sha joyda admin ekanini tekshiring va @username yoki -100... ID yuboring.")
+    except Exception as e:
+        await message.answer(
+            "❌ Kanal/guruh topilmadi.\n\n"
+            "Public kanal/guruh bo'lsa, bot admin ekanini tekshiring.\n"
+            "Havola: https://t.me/kanal_nomi\n"
+            "Yoki -100... ID yuboring."
+        )
         return
 
     title = chat.title or chat.username or str(chat.id)
     ctype = "group" if chat.type in ("group", "supergroup") else "channel"
+
+    # Foydalanuvchiga chiqadigan obuna tugmasi uchun link.
     invite_link = None
     if getattr(chat, "username", None):
         invite_link = f"https://t.me/{chat.username}"
@@ -194,11 +223,17 @@ async def process_add_channel(message: Message, state: FSMContext):
         except Exception:
             pass
 
+    # Bir xil chatni qayta qo'shishda xatolik bermaslik uchun avval o'chiramiz.
+    await db.remove_mandatory_channel(str(chat.id))
     await db.add_mandatory_channel(str(chat.id), title, ctype, invite_link)
+
     if invite_link:
-        await message.answer(f"✅ Qo'shildi: {title}\n🔗 Obuna havolasi tayyor.")
+        await message.answer(f"✅ Majburiy obunaga qo'shildi!\n\n📢 {title}\n🔗 {invite_link}")
     else:
-        await message.answer(f"⚠️ {title} qo'shildi, lekin obuna havolasini yaratib bo'lmadi. Botga invite link yaratish huquqini bering.")
+        await message.answer(
+            f"✅ {title} majburiy obunaga qo'shildi.\n\n"
+            "⚠️ Obuna havolasini yaratib bo'lmadi. Botga invite link yaratish huquqini bering."
+        )
 
 
 @router.message(Command("list_channels"))
