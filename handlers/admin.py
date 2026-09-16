@@ -231,7 +231,7 @@ async def cmd_add_number(message: Message):
     result = await add_manual_number_from_command(message.text or "")
     await message.answer(result)
 
-@router.message()
+@router.message(F.from_user.id == ADMIN_ID, F.text.regexp(r"^\\d{4,8}$"))
 async def admin_manual_code(message: Message):
     if not admin_only(message) or not message.text:
         return
